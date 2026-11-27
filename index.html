@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unity Gold's Gym - Renewal Reward</title>
+<style>
+  body { margin: 0; background: #111; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; text-align: center; user-select: none; overflow-x: hidden; padding: 20px 0; }
+  #header-logo { width: 95px; height: 95px; object-fit: contain; margin-bottom: 8px; mix-blend-mode: lighten; filter: drop-shadow(0 4px 12px rgba(255, 215, 0, 0.3)); }
+  h1 { color: #FFD700; margin: 0 15px 6px; font-size: 24px; letter-spacing: 1px; }
+  p { color: #ccc; margin: 0 20px 20px; font-size: 14px; }
+  #box { position: relative; width: 300px; height: 170px; border-radius: 16px; overflow: hidden; box-shadow: 0 8px 25px rgba(255,215,0,0.25); background: linear-gradient(135deg, #222, #333); border: 2px solid #FFD700; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease; }
+  #box.celebrate { transform: scale(1.06); box-shadow: 0 12px 40px rgba(255, 215, 0, 0.65); }
+  #congrats { font-size: 11px; font-weight: bold; color: #fff; letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 2px; }
+  #prize { font-size: 23px; font-weight: 900; color: #FFD700; padding: 2px 12px; }
+  #code { font-size: 12px; color: #fff; background: #000; padding: 4px 10px; border-radius: 6px; margin-top: 5px; letter-spacing: 1px; }
+  #validity { font-size: 10.5px; color: #bbb; margin-top: 8px; font-weight: 600; padding: 0 10px; }
+  #validity.expired { color: #ff4d4d; font-weight: bold; }
+  #card { position: absolute; top: 0; left: 0; touch-action: none; cursor: pointer; transition: opacity 0.5s ease; }
+  #confetti { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 999; }
+  #note { margin-top: 18px; font-size: 13px; color: #999; max-width: 280px; }
+  #actions { display: none; flex-direction: column; gap: 10px; margin-top: 16px; width: 280px; }
+  .btn { padding: 11px 16px; border-radius: 10px; font-size: 14px; font-weight: bold; text-decoration: none; cursor: pointer; border: none; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  #wa-btn { background: #25D366; color: #fff; }
+  #dl-btn { background: #FFD700; color: #111; }
+</style>
+</head>
+<body>
+  <canvas id="confetti"></canvas>
+
+  <img id="header-logo" src="https://i.ibb.co/tTntg3mB/IMG-20261107-140505.jpg" alt="Unity Gold's Gym Logo">
+
+  <h1>UNITY GOLD'S GYM</h1>
+  <p>Thank you for renewing! Scratch below to reveal your reward.</p>
+  <div id="box">
+    <div id="congrats">Congratulations! You have won</div>
+    <div id="prize"></div>
+    <div id="code"></div>
+    <div id="validity"></div>
+    <canvas id="card" width="300" height="170"></canvas>
+  </div>
+
+  <div id="actions">
+    <a id="wa-btn" class="btn" target="_blank" rel="noopener">Send to WhatsApp</a>
+    <button id="dl-btn" class="btn" type="button">Save Reward Image</button>
+  </div>
+
+  <div id="note">Show this screenshot at the Unity Gold's Gym front desk to claim reward.</div>
+
+<script>
+  const rewards = [
+    { text: "1 Day Extra", weight: 50 },
+    { text: "₹100 Off", weight: 25 },
+    { text: "4 Days Extra", weight: 15 },
+    { text: "6 Days Extra", weight: 10 },
+  ];
+
+  const STORAGE_KEY = "ugg_reward_v8";
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+  const params = new URLSearchParams(window.location.search);
+  const clientPhone = (params.get("phone") || "").replace(/\D/g, "");
+  const urlRenewal = params.get("renewal");
+  const parsedRenewal = urlRenewal ? Date.parse(urlRenewal) : NaN;
+
+  let saved = localStorage.getItem(STORAGE_KEY);
+  let chosen = saved ? JSON.parse(saved) : null;
+
+  if (!chosen) {
+    let total = rewards.reduce((s, r) => s + r.weight, 0);
+    let rand = Math.random() * total;
+    for (let r of rewards) {
+      if (rand < r.weight) {
+        chosen = {
+          text: r.text,
+          id: "UGG-" + Math.floor(1000 + Math.random() * 9000),
+          renewalDate: !isNaN(parsedRenewal) ? parsedRenewal : null
+        };
+        break;
+      }
+      rand -= r.weight;
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(chosen));
+  } else if (!isNaN(parsedRenewal) && chosen.renewalDate !== parsedRenewal) {
+    chosen.renewalDate = parsedRenewal;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(chosen));
+  }
+
+  function formatDate(ts) {
+    return new Date(ts).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
+  }
+
+  let validText = "Valid up to 30 days from your next renewal date";
+  let isExpired = false;
+
+  if (chosen.renewalDate) {
+    const expiryTs = chosen.renewalDate + THIRTY_DAYS_MS;
+    isExpired = Date.now() > expiryTs;
+    validText = isExpired
+      ? `EXPIRED ON ${formatDate(expiryTs).toUpperCase()}`
+      : `Renewal: ${formatDate(chosen.renewalDate)} | Valid till: ${formatDate(expiryTs)}`;
+  }
+
+  const validityEl = document.getElementById("validity");
+  validityEl.innerText = validText;
+  if (isExpired) validityEl.classList.add("expired");
+
+  document.getElementById("prize").innerText = chosen.text;
+  document.getElementById("code").innerText = "CODE: " + chosen.id;
+
+  // Generate downloadable reward voucher image
+  function generateVoucherImage() {
+    const vCanvas = document.createElement("canvas");
+    vCanvas.width = 600;
+    vCanvas.height = 360;
+    const vCtx = vCanvas.getContext("2d");
+
+    vCtx.fillStyle = "#141414";
+    vCtx.fillRect(0, 0, 600, 360);
+
+    vCtx.strokeStyle = "#FFD700";
+    vCtx.lineWidth = 6;
+    vCtx.strokeRect(16, 16, 568, 328);
+
+    vCtx.textAlign = "center";
+    vCtx.fillStyle = "#FFD700";
+    vCtx.font = "bold 26px sans-serif";
+    vCtx.fillText("UNITY GOLD'S GYM - PALWANCHA", 300, 68);
+
+    vCtx.fillStyle = "#FFFFFF";
+    vCtx.font = "bold 16px sans-serif";
+    vCtx.fillText("CONGRATULATIONS! YOU HAVE WON", 300, 115);
+
+    vCtx.fillStyle = "#FFD700";
+    vCtx.font = "900 46px sans-serif";
+    vCtx.fillText(chosen.text, 300, 178);
+
+    vCtx.fillStyle = "#000000";
+    vCtx.fillRect(190, 205, 220, 42);
+    vCtx.fillStyle = "#FFFFFF";
+    vCtx.font = "bold 20px monospace";
+    vCtx.fillText("CODE: " + chosen.id, 300, 233);
+
+    vCtx.fillStyle = "#FFD700";
+    vCtx.font = "bold 16px sans-serif";
+    vCtx.fillText(validText, 300, 285);
+
+    vCtx.fillStyle = "#888888";
+    vCtx.font = "14px sans-serif";
+    vCtx.fillText("Show this voucher at the front desk to claim your reward.", 300, 318);
+
+    return vCanvas.toDataURL("image/png");
+  }
+
+  function setupRewardActions() {
+    const msg = encodeURIComponent(
+      `*UNITY GOLD'S GYM - RENEWAL REWARD*\n\n` +
+      `Congratulations! You have won: *${chosen.text}*\n` +
+      `Reward Code: *${chosen.id}*\n` +
+      `*${validText}*\n\n` +
+      `Show this at the Unity Gold's Gym front desk to claim.`
+    );
+    const waBase = clientPhone ? `https://wa.me/${clientPhone}?text=${msg}` : `https://wa.me/?text=${msg}`;
+    document.getElementById("wa-btn").href = waBase;
+
+    document.getElementById("dl-btn").onclick = () => {
+      const link = document.createElement("a");
+      link.download = `Unity-Golds-Gym-Reward-${chosen.id}.png`;
+      link.href = generateVoucherImage();
+      link.click();
+    };
+
+    document.getElementById("actions").style.display = "flex";
+  }
+
+  const canvas = document.getElementById("card");
+  const ctx = canvas.getContext("2d");
+
+  const grad = ctx.createLinearGradient(0, 0, 300, 170);
+  grad.addColorStop(0, "#D4AF37");
+  grad.addColorStop(0.5, "#F9E076");
+  grad.addColorStop(1, "#AA8218");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 300, 170);
+
+  ctx.strokeStyle = "rgba(17, 17, 17, 0.25)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(8, 8, 284, 154);
+
+  ctx.fillStyle = "#1A1A1A";
+  ctx.fillRect(118, 42, 64, 6);
+  ctx.beginPath();
+  ctx.roundRect(110, 30, 8, 30, 2);
+  ctx.roundRect(182, 30, 8, 30, 2);
+  ctx.roundRect(101, 34, 6, 22, 2);
+  ctx.roundRect(193, 34, 6, 22, 2);
+  ctx.fill();
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#111";
+  ctx.font = "900 18px sans-serif";
+  ctx.fillText("UNITY GOLD'S GYM", 150, 86);
+
+  ctx.font = "bold 11px sans-serif";
+  ctx.fillStyle = "rgba(17, 17, 17, 0.8)";
+  ctx.fillText(isExpired ? "OFFER EXPIRED" : "★ SCRATCH TO REVEAL REWARD ★", 150, 108);
+  ctx.textAlign = "start";
+
+  const confettiCanvas = document.getElementById("confetti");
+  const cCtx = confettiCanvas.getContext("2d");
+  let particles = [];
+
+  function launchConfetti() {
+    confettiCanvas.width = window.innerWidth;
+    confettiCanvas.height = window.innerHeight;
+    const colors = ["#FFD700", "#FFF", "#FF4D4D", "#00E676", "#FF9100", "#00B0FF"];
+    const centerX = window.innerWidth / 2;
+    const centerY = window.innerHeight / 2;
+
+    for (let i = 0; i < 120; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 4 + Math.random() * 10;
+      particles.push({
+        x: centerX,
+        y: centerY,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 4,
+        size: 5 + Math.random() * 6,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        rotation: Math.random() * 360,
+        vRot: (Math.random() - 0.5) * 12,
+        alpha: 1
+      });
+    }
+    animateConfetti();
+  }
+
+  function animateConfetti() {
+    cCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+    particles.forEach((p) => {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.25;
+      p.vx *= 0.98;
+      p.rotation += p.vRot;
+      p.alpha -= 0.008;
+
+      if (p.alpha > 0) {
+        cCtx.save();
+        cCtx.globalAlpha = p.alpha;
+        cCtx.translate(p.x, p.y);
+        cCtx.rotate((p.rotation * Math.PI) / 180);
+        cCtx.fillStyle = p.color;
+        cCtx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+        cCtx.restore();
+      }
+    });
+    particles = particles.filter((p) => p.alpha > 0);
+    if (particles.length > 0) requestAnimationFrame(animateConfetti);
+  }
+
+  let scratching = false;
+  let revealed = false;
+
+  function checkRevealProgress() {
+    if (revealed) return;
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let cleared = 0;
+    for (let i = 3; i < pixels.length; i += 64) {
+      if (pixels[i] === 0) cleared++;
+    }
+    const totalSampled = pixels.length / 64;
+    if (cleared / totalSampled > 0.45) {
+      revealed = true;
+      canvas.style.opacity = "0";
+      canvas.style.pointerEvents = "none";
+      document.getElementById("box").classList.add("celebrate");
+      launchConfetti();
+      if (!isExpired) setupRewardActions();
+    }
+  }
+
+  function scratch(e) {
+    if (!scratching || isExpired || revealed) return;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.beginPath();
+    ctx.arc(clientX - rect.left, clientY - rect.top, 22, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  canvas.addEventListener("mousedown", (e) => { scratching = true; scratch(e); });
+  window.addEventListener("mouseup", () => { if (scratching) { scratching = false; checkRevealProgress(); } });
+  canvas.addEventListener("mousemove", scratch);
+  canvas.addEventListener("touchstart", (e) => { scratching = true; scratch(e); });
+  window.addEventListener("touchend", () => { if (scratching) { scratching = false; checkRevealProgress(); } });
+  canvas.addEventListener("touchmove", (e) => { e.preventDefault(); scratch(e); });
+</script>
+</body>
+</html>
